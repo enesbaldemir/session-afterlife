@@ -1,0 +1,19 @@
+name: Feature or new check
+description: Suggest an improvement or a new session test.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should it do
+    validations:
+      required: true
+  - type: input
+    id: wstg
+    attributes:
+      label: Related WSTG test, if any
+      placeholder: WSTG-SESS-07
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters

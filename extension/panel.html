@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Session Afterlife</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icons/32.png" alt="" width="20" height="20">
+    <h1>Session Afterlife</h1>
+    <div class="seg" role="group" aria-label="Mode">
+      <button id="mode-auto" data-act="mode" data-mode="auto" title="Watch the site and check automatically">Auto</button><button id="mode-manual" data-act="mode" data-mode="manual" title="Choose each step yourself">Manual</button>
+    </div>
+  </header>
+
+  <div id="error" class="error" hidden></div>
+  <div id="busy" class="busy" hidden></div>
+
+  <section id="s-site" class="card"></section>
+  <section id="s-main" class="card"></section>
+  <section id="s-results" class="card"></section>
+  <section id="s-findings" class="card"></section>
+  <section id="s-session" class="card"></section>
+  <section id="s-test" class="card"></section>
+  <section id="s-scope" class="card"></section>
+
+  <footer class="foot">Test only applications you own or are authorized to test. Session values stay in this browser's memory and are never sent anywhere.</footer>
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

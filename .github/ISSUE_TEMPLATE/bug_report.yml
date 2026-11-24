@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Result details or report
+      description: Paste the result card's Details or the exported report. They contain no cookie values or tokens, but check before you paste.
+      render: markdown
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version and operating system
+      placeholder: Chrome 131, Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: login
+    attributes:
+      label: How the app signs in
+      options: [Form and cookie, Token in Authorization header, OAuth or OpenID Connect, SAML, Other, Demo app]
