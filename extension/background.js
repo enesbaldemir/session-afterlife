@@ -13,6 +13,14 @@
 
 import { classify, baselineQuality, compareCookieJars } from './lib/compare.js';
 import { classifyStorage, storageResidue } from './lib/storage.js';
+
+// Cross-browser: Firefox exposes `browser` (promise-based); Chrome exposes
+// `chrome` (promise-based in MV3). This module-scoped binding shadows the
+// global so the rest of the file uses one name on both browsers.
+const chrome = globalThis.browser ?? globalThis.chrome;
+// Firefox's declarativeNetRequest has no session rules, so the cookie replay
+// falls back to a blocking webRequest listener there.
+const hasDNR = !!(chrome.declarativeNetRequest && chrome.declarativeNetRequest.updateSessionRules);
 import { analyseLifetimes } from './lib/lifetime.js';
 import * as T from './lib/timeout.js';
 import { isLogoutRequest, isPasswordChange, isUnsafeUrl, rankCandidates, separationScore } from './lib/detect.js';
@@ -182,6 +190,51 @@ const cookieHeaderOf = (list) => list.map((c) => `${c.name}=${c.value}`).join(';
 // ---------- replay ----------
 
 let ruleSeq = 1;
+const REPLAY_NONCE_HEADER = 'x-afterlife-replay';
+
+// Set the old Cookie header for one replay request, cross-browser. Chrome uses
+// a declarativeNetRequest session rule scoped to the extension's own requests;
+// Firefox uses a blocking webRequest listener matched by a nonce header, which
+// the fetch below carries. Returns { nonce, cleanup }.
+async function applyReplayCookie(target, cookieHeader) {
+  if (hasDNR) {
+    const ruleId = 1000 + (ruleSeq++ % 100000);
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [ruleId],
+      addRules: [{
+        id: ruleId,
+        priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value: cookieHeader }] },
+        condition: {
+          regexFilter: `^${reEscape(target)}/`,
+          tabIds: [chrome.tabs.TAB_ID_NONE],
+          initiatorDomains: [chrome.runtime.id],
+        },
+      }],
+    });
+    return { nonce: null, cleanup: () => chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [ruleId] }) };
+  }
+  const nonce = `${Date.now()}-${ruleSeq++}`;
+  const listener = (details) => {
+    const headers = details.requestHeaders || [];
+    const tag = headers.find((x) => x.name.toLowerCase() === REPLAY_NONCE_HEADER);
+    if (!tag || tag.value !== nonce) return {};
+    const out = headers.filter((x) => {
+      const n = x.name.toLowerCase();
+      return n !== REPLAY_NONCE_HEADER && n !== 'cookie';
+    });
+    out.push({ name: 'Cookie', value: cookieHeader });
+    return { requestHeaders: out };
+  };
+  // The urls filter is a match pattern, which cannot contain a port, so build
+  // it from scheme + hostname only (it matches every port on that host). No
+  // tabId filter: Firefox does not reliably match background requests by tabId,
+  // and the nonce header already identifies our single replay request.
+  const tu = new URL(target);
+  const pattern = `${tu.protocol}//${tu.hostname}/*`;
+  chrome.webRequest.onBeforeSendHeaders.addListener(listener, { urls: [pattern] }, ['blocking', 'requestHeaders']);
+  return { nonce, cleanup: () => chrome.webRequest.onBeforeSendHeaders.removeListener(listener) };
+}
 
 async function replay({ url, method, headers }, session) {
   return serial(async () => {
@@ -192,22 +245,11 @@ async function replay({ url, method, headers }, session) {
     if (session?.authorization) h.set('Authorization', session.authorization);
 
     const target = originOf(url);
-    let ruleId = null;
+    let cleanup = null;
     if (session?.cookieHeader) {
-      ruleId = 1000 + (ruleSeq++ % 100000);
-      await chrome.declarativeNetRequest.updateSessionRules({
-        removeRuleIds: [ruleId],
-        addRules: [{
-          id: ruleId,
-          priority: 1,
-          action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value: session.cookieHeader }] },
-          condition: {
-            regexFilter: `^${reEscape(target)}/`,
-            tabIds: [chrome.tabs.TAB_ID_NONE],
-            initiatorDomains: [chrome.runtime.id],
-          },
-        }],
-      });
+      const applied = await applyReplayCookie(target, session.cookieHeader);
+      cleanup = applied.cleanup;
+      if (applied.nonce) h.set(REPLAY_NONCE_HEADER, applied.nonce);
     }
     try {
       const res = await fetch(url, {
@@ -231,7 +273,7 @@ async function replay({ url, method, headers }, session) {
     } catch (e) {
       return { error: String(e?.message || e), at: Date.now() };
     } finally {
-      if (ruleId !== null) await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [ruleId] });
+      if (cleanup) await cleanup();
     }
   });
 }
@@ -332,10 +374,17 @@ async function readClientStorage(origin) {
 
 // ---------- capture ----------
 
+// 'extraHeaders' is Chrome-only and is needed there to see the Cookie header;
+// on Firefox it is an invalid value (and the Cookie header is visible without
+// it), so it must be left out or the listener registration throws.
+const EXTRA_HEADERS_SUPPORTED = !!(chrome.webRequest?.OnBeforeSendHeadersOptions
+  && 'EXTRA_HEADERS' in chrome.webRequest.OnBeforeSendHeadersOptions);
+const CAPTURE_SPEC = EXTRA_HEADERS_SUPPORTED ? ['requestHeaders', 'extraHeaders'] : ['requestHeaders'];
+
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => { onRequest(details); },
   { urls: ['<all_urls>'] },
-  ['requestHeaders', 'extraHeaders'],
+  CAPTURE_SPEC,
 );
 
 async function onRequest(d) {
@@ -925,8 +974,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 function init() {
+  // Chrome: open the side panel when the toolbar icon is clicked.
   chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   refreshAllIcons();
 }
 chrome.runtime.onInstalled.addListener(init);
 chrome.runtime.onStartup?.addListener(init);
+
+// Firefox: no side panel, so the toolbar icon toggles the sidebar instead.
+if (chrome.sidebarAction && chrome.action?.onClicked) {
+  chrome.action.onClicked.addListener(() => {
+    (chrome.sidebarAction.toggle || chrome.sidebarAction.open)?.();
+  });
+}
