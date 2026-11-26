@@ -1,6 +1,6 @@
 {
   "name": "session-afterlife",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Browser extension that checks whether an old session still works after logout, password change or timeout.",
   "type": "module",
