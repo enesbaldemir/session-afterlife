@@ -2,6 +2,7 @@
 
 import { formatDuration } from './lifetime.js';
 import { describeResult } from './timeout.js';
+import { storageSummary, areaLabel } from './storage.js';
 
 export const SCENARIOS = Object.freeze({
   logout: { title: 'Logout', wstg: 'WSTG-SESS-06', expect: 'INVALIDATED' },
@@ -43,7 +44,11 @@ export function headline(check) {
   const server = check.verdict === 'STILL_VALID'
     ? 'Server: old session still accepted'
     : check.verdict === 'INVALIDATED' ? 'Server: old session rejected' : 'Server: unclear';
-  return `${browser} — ${server}`;
+  let line = `${browser} — ${server}`;
+  if (check.storage?.hadBefore) {
+    line += check.storage.residue.length ? ` — Storage: ${check.storage.residue.length} token(s) left behind` : ' — Storage: cleared';
+  }
+  return line;
 }
 
 export function toMarkdown(state, { findings = [] } = {}) {
@@ -95,6 +100,9 @@ export function toMarkdown(state, { findings = [] } = {}) {
       lines.push(`- When: ${new Date(c.at).toISOString()}${c.sinceSnapshotSec !== undefined ? ` (${formatDuration(c.sinceSnapshotSec)} after the snapshot)` : ''}`);
       lines.push(`- Server: ${VERDICT_TEXT[c.verdict]}`);
       if (c.cookieDiff) lines.push(`- Browser: ${browserSummary(c.cookieDiff)}`);
+      if (c.storage?.hadBefore) {
+        lines.push(`- Client storage: ${c.storage.residue.length === 0 ? 'cleared at logout' : c.storage.residue.map((e) => `\`${e.key}\` in ${areaLabel(e.area)}`).join(', ') + ' left behind'}`);
+      }
       if (c.timeout) lines.push(`- Timeout: ${describeResult(c.timeout, c.unitName || 'min')}`);
       for (const r of c.reasons || []) lines.push(`  - ${r}`);
       lines.push('');

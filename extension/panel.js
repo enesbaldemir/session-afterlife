@@ -1,6 +1,7 @@
 import { analyseLifetimes, decodeJwt, formatDuration } from './lib/lifetime.js';
 import { describeResult, nextDelayUnits } from './lib/timeout.js';
 import { SCENARIOS, assess, toMarkdown, toCurl } from './lib/report.js';
+import { areaLabel } from './lib/storage.js';
 import { DEFAULT_SCOPE, normalizePattern, hostInScope, patternToOrigins, suggestPatterns } from './lib/scope.js';
 import { auditSession, sessionCookieNames } from './lib/findings.js';
 import { TAMPER } from './lib/tamper.js';
@@ -383,6 +384,18 @@ function sides(c) {
   return { browser, server };
 }
 
+// A note under a logout/password result about tokens left in client storage.
+function storageLine(c) {
+  const st = c.storage;
+  if (!st || !st.hadBefore) return '';
+  if (st.residue.length === 0) {
+    return '<div class="note ok">Client storage: session tokens were cleared at logout ✓</div>';
+  }
+  const items = st.residue.map((e) => `<code>${esc(e.key)}</code> in ${esc(areaLabel(e.area))}`).join(', ');
+  return `<div class="note bad">Client storage: ${items} still present after logout ✗<br>
+    <span class="hint">The app forgot to clear these. Anyone with access to this browser profile can read them.</span></div>`;
+}
+
 function renderResults() {
   const v = $('s-results');
   const s = site();
@@ -402,6 +415,7 @@ function renderResults() {
         <div class="side"><div class="k">Server</div><div class="v ${server.cls}">${esc(server.v)}</div></div>
       </div>
       ${c.timeout ? `<p>${esc(describeResult(c.timeout, c.unitName))}</p>` : ''}
+      ${storageLine(c)}
       <details><summary>Details</summary><ul>${(c.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
       ${cookies ? `<p class="muted">Cookies sent with the reference request:</p><ul>${cookies}</ul>` : ''}</details>
     </div>`;

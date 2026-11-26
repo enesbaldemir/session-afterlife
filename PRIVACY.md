@@ -8,7 +8,8 @@ Only for the sites in scope (localhost and 127.0.0.1 by default, plus the sites 
 
 - the cookies that apply to the request you pick, including `HttpOnly` cookies;
 - the headers of requests your tabs send to that site, including `Cookie` and `Authorization`;
-- the responses to the requests the extension replays.
+- the responses to the requests the extension replays;
+- when checking a logout, the key names in the page's `localStorage`, `sessionStorage` and IndexedDB (to spot leftover session tokens). Only key names and a classification are kept; the stored values are never saved.
 
 ## Where it is kept
 

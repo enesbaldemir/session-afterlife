@@ -12,7 +12,8 @@
     "alarms",
     "notifications",
     "sidePanel",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "optional_host_permissions": [
     "http://*/*",
