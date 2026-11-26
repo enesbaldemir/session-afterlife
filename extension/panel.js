@@ -6,6 +6,9 @@ import { DEFAULT_SCOPE, normalizePattern, hostInScope, patternToOrigins, suggest
 import { auditSession, sessionCookieNames } from './lib/findings.js';
 import { TAMPER } from './lib/tamper.js';
 
+// Cross-browser binding (see background.js): shadows the global so chrome.* works on Firefox too.
+const chrome = globalThis.browser ?? globalThis.chrome;
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const params = new URLSearchParams(location.search);

@@ -11,7 +11,7 @@ and audits session cookies and tokens while you use your app. No proxy, no setup
 
 [![Tests](https://github.com/enesbaldemir/session-afterlife/actions/workflows/test.yml/badge.svg)](https://github.com/enesbaldemir/session-afterlife/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
+![Chrome + Firefox](https://img.shields.io/badge/Chrome%20%2B%20Firefox-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
 ![OWASP WSTG](https://img.shields.io/badge/mapped%20to-OWASP%20WSTG-000000)
 ![Dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
 
@@ -40,6 +40,16 @@ node demo/server.js --flaws logout,fixation,weak-cookie,cache
 3. Watch the findings appear, then click **Log out**.
 
 The demo app needs only Node.js (no `npm install`). Run `node demo/server.js` without flaws to see everything pass.
+
+### Firefox
+
+Session Afterlife runs on Firefox too (140+). Build the Firefox package and load it temporarily:
+
+```sh
+npm run build          # writes dist/chrome/ and dist/firefox/
+```
+
+Open `about:debugging` → **This Firefox** → **Load Temporary Add-on**, and choose `dist/firefox/manifest.json`. The panel opens as a sidebar (toggle it with the toolbar icon). On Firefox the cookie replay uses blocking `webRequest` instead of `declarativeNetRequest`; everything else is the same.
 
 ## Features
 
@@ -137,7 +147,7 @@ Switch to **Manual** at the top of the panel to pick the reference request yours
 
 - **Capture:** `chrome.webRequest` (with `extraHeaders`) sees the requests your tabs send to sites in scope, including the `Cookie` and `Authorization` headers.
 - **Recording:** `chrome.cookies` reads every cookie that applies to the reference URL, `HttpOnly` cookies included.
-- **Replay:** the service worker sends the reference request with `credentials: "omit"`, so your browser's current cookies are left out. A temporary `declarativeNetRequest` session rule, limited to the extension's own requests to that site, sets the old `Cookie` header. Response cookies are ignored, so your browser state does not change.
+- **Replay:** the background worker sends the reference request with `credentials: "omit"`, so your browser's current cookies are left out. The old `Cookie` header is set for that one request only — on Chrome via a temporary `declarativeNetRequest` session rule scoped to the extension's own requests, on Firefox via a blocking `webRequest` listener matched by a nonce header. Response cookies are ignored, so your browser state does not change.
 - **Verdict:** the replayed response is compared with a signed-in and an anonymous baseline (status, final URL after redirects, page text similarity), or checked for the marker: **STILL VALID**, **INVALIDATED** or **INCONCLUSIVE**, always with the reason.
 - **Session cookie detection:** the reference request is replayed without each cookie in turn; the ones whose absence logs you out are the session cookies.
 - **Fixation:** `chrome.cookies.onChanged` records when each cookie got its value; a session value older than the login form submission means it was not renewed.
@@ -202,7 +212,7 @@ Only within the program's scope and rules. Add the in-scope domains to the scope
 ## Roadmap
 
 - [ ] Chrome Web Store release
-- [ ] Firefox support
+- [x] Firefox support (sidebar; blocking webRequest for cookie replay)
 - [ ] Refresh token rotation and reuse detection
 - [ ] OpenID Connect logout (RP-initiated and back-channel)
 - [ ] Partitioned (CHIPS) cookies
@@ -221,7 +231,9 @@ Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ```sh
 npm test                      # unit tests (Node 20+)
 npm run test:e2e              # end-to-end tests in Chromium with the extension loaded (needs Playwright)
-npm run pack                  # dist/session-afterlife-<version>.zip for the Chrome Web Store
+npm run build                 # dist/chrome/ and dist/firefox/ (+ zips) for both stores
+npm run lint:firefox          # web-ext lint of the Firefox build
+npm run pack                  # Chrome-only zip
 node scripts/screenshots.js   # README screenshots
 node scripts/demo-gif.js      # docs/demo.gif (needs ffmpeg)
 ```
