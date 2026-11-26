@@ -12,6 +12,7 @@
 // Secrets stay in chrome.storage.session (memory only).
 
 import { classify, baselineQuality, compareCookieJars } from './lib/compare.js';
+import { classifyStorage, storageResidue } from './lib/storage.js';
 import { analyseLifetimes } from './lib/lifetime.js';
 import * as T from './lib/timeout.js';
 import { isLogoutRequest, isPasswordChange, isUnsafeUrl, rankCandidates, separationScore } from './lib/detect.js';
@@ -281,6 +282,52 @@ async function recordSession(s, ref, session, prepared = null) {
   s.events = [];
   s.tamper = {};
   await findEssential(s);
+  // Token-like entries in client storage while signed in, to compare after logout.
+  const raw = await readClientStorage(s.origin);
+  s.snapshot.storageTokens = raw ? classifyStorage(raw) : [];
+  s.snapshot.storageRead = !!raw;
+}
+
+// ---------- client-side storage ----------
+
+// Remember a tab per origin so storage can be read from the page later.
+const lastTabForOrigin = new Map();
+
+// Injected into the page (serialized): read localStorage, sessionStorage and
+// the names of IndexedDB databases. Must be self-contained.
+async function pageStorageReader() {
+  const dump = (s) => {
+    const o = {};
+    try { for (let i = 0; i < s.length; i++) { const k = s.key(i); o[k] = s.getItem(k); } } catch (e) { /* blocked */ }
+    return o;
+  };
+  let idb = [];
+  try { if (indexedDB.databases) idb = (await indexedDB.databases()).map((d) => d.name).filter(Boolean); } catch (e) { /* unsupported */ }
+  return { local: dump(window.localStorage), session: dump(window.sessionStorage), idb };
+}
+
+async function tabForOrigin(origin) {
+  const remembered = lastTabForOrigin.get(origin);
+  if (remembered != null) {
+    try { const t = await chrome.tabs.get(remembered); if (t && originOf(t.url) === origin) return remembered; } catch { /* gone */ }
+  }
+  try {
+    const tabs = await chrome.tabs.query({});
+    const t = tabs.find((x) => originOf(x.url) === origin);
+    return t ? t.id : null;
+  } catch { return null; }
+}
+
+// Returns { local, session, idb } from a tab on the origin, or null.
+async function readClientStorage(origin) {
+  const tabId = await tabForOrigin(origin);
+  if (tabId == null) return null;
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId }, world: 'ISOLATED', func: pageStorageReader });
+    return res?.result || null;
+  } catch {
+    return null; // tab navigated, blocked, or no host permission
+  }
 }
 
 // ---------- capture ----------
@@ -298,6 +345,7 @@ async function onRequest(d) {
   await load();
   if (!inScopeUrl(d.url)) return;
   const s = getSite(origin);
+  if (d.tabId >= 0 && (d.type === 'main_frame' || !lastTabForOrigin.has(origin))) lastTabForOrigin.set(origin, d.tabId);
 
   if (['POST', 'PUT', 'PATCH'].includes(d.method)) s.lastWriteAt = Date.now();
 
@@ -453,6 +501,13 @@ async function check(msg) {
       cookieDiff: compareCookieJars(s.snapshot.cookies, after),
       auto: !!msg.auto,
     };
+    // Client-storage residue: did session tokens survive in the page's storage?
+    if (['logout', 'password', 'elsewhere'].includes(msg.scenario)) {
+      const raw = await readClientStorage(s.origin);
+      const now = raw ? classifyStorage(raw) : [];
+      const before = s.snapshot.storageTokens || [];
+      result.storage = { residue: storageResidue(before, now), hadBefore: before.length > 0, read: !!raw };
+    }
     s.checks.push(result);
     refreshAllIcons();
     return result;

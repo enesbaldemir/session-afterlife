@@ -308,3 +308,27 @@ test('tamper: no change when the server ignores the value', { timeout: 90_000 },
     await box.locator('.tamper-result .v', { hasText: 'No change' }).waitFor({ timeout: 15_000 });
   });
 });
+
+test('storage: a token left in localStorage after logout is caught', { timeout: 90_000 }, async () => {
+  await scenario({ flaws: ['storage-logout'] }, async ({ demo, panel, site }) => {
+    await signIn(site, demo.base); // the account page stashes access_token in localStorage
+    await waitStatus(panel, 'Watching this session');
+    await site.click('#logout');
+    const r = await lastResult(panel, 20_000);
+    assert.equal(r.badge, 'PASS', 'the server-side logout itself is fine');
+    const card = panel.locator('#s-results .result').first();
+    const text = (await card.textContent()).replace(/\s+/g, ' ');
+    assert.match(text, /Client storage:.*access_token.*localStorage.*still present after logout/);
+  });
+});
+
+test('storage: a clean logout shows no storage warning', { timeout: 90_000 }, async () => {
+  await scenario({}, async ({ demo, panel, site }) => {
+    await signIn(site, demo.base);
+    await waitStatus(panel, 'Watching this session');
+    await site.click('#logout');
+    await lastResult(panel, 20_000);
+    const text = (await panel.locator('#s-results .result').first().textContent()).replace(/\s+/g, ' ');
+    assert.doesNotMatch(text, /still present after logout/);
+  });
+});

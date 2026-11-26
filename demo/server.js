@@ -20,6 +20,8 @@
 //   token-in-url   After login, the session ID is put in the URL.
 //   trust-role     A client-side `role` cookie decides what the account page
 //                  shows, so changing it to `admin` unlocks an admin section.
+//   storage-logout The account page stores an access token in localStorage,
+//                  and logout clears the cookie but leaves that token behind.
 //
 // Only run this on your own machine. It is deliberately insecure when flaws
 // are enabled.
@@ -47,7 +49,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-const KNOWN_FLAWS = ['logout', 'logout-rotate', 'password', 'jwt', 'fixation', 'weak-cookie', 'cache', 'token-in-url', 'trust-role'];
+const KNOWN_FLAWS = ['logout', 'logout-rotate', 'password', 'jwt', 'fixation', 'weak-cookie', 'cache', 'token-in-url', 'trust-role', 'storage-logout'];
 const COOKIE_MAX_AGE = 30 * 24 * 3600; // what the cookie claims: 30 days
 const TOKEN_TTL = 3600;
 
@@ -242,7 +244,12 @@ function createApp(options = {}) {
 <p>Session started ${esc(new Date(s.created).toISOString())}.</p>
 <p>Active sessions for this user: ${[...sessions.values()].filter((x) => x.user === s.user).length}</p></div>
 ${adminSection}<div class="card"><a href="/password">Change password</a></div>
-<form method="post" action="/logout"><button id="logout">Log out</button></form>`, cache);
+<form method="post" action="/logout"><button id="logout">Log out</button></form>
+${has('storage-logout') ? `<script>
+  // Flaw: an access token is kept in localStorage and never cleared at logout.
+  localStorage.setItem('access_token', ${JSON.stringify(signJwt({ sub: s.user, iat: Math.floor(now() / 1000), exp: Math.floor(now() / 1000) + TOKEN_TTL, jti: rid() }))});
+  sessionStorage.setItem('csrf', ${JSON.stringify(rid())});
+</script>` : ''}`, cache);
     }
 
     if (m === 'GET' && p === '/api/me') {

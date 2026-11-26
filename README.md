@@ -51,6 +51,7 @@ The demo app needs only Node.js (no `npm install`). Run `node demo/server.js` wi
 - ⏱️ **Measures idle and absolute timeouts** on the server, not just what the cookie claims.
 - 🔍 **Shows the recorded cookies and tokens** (masked until you click **Show**) and copies a ready-to-run **curl** command with the old session for your report.
 - 🧪 **Tamper check**: change one cookie value and replay the reference request to see whether the server trusts a client-supplied value (for example `role=user` → `role=admin`). Read-only, and your real session is left untouched.
+- 🧹 **Post-logout storage check**: after logout it looks for session tokens left behind in `localStorage`, `sessionStorage` and IndexedDB — a common gap where the cookie is cleared but an access token lingers in the browser.
 - 📄 **Exports a Markdown report** with WSTG references and no secrets in it.
 - 🧭 **Stays in scope**: only the sites you list are watched. `localhost` and `127.0.0.1` are in the list from the start.
 
@@ -59,6 +60,7 @@ The demo app needs only Node.js (no `npm install`). Run `node demo/server.js` wi
 | Check | When | Guide reference |
 | --- | --- | --- |
 | Logout ends the session | After you log out | [WSTG-SESS-06](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/06-Session_Management_Testing/06-Testing_for_Logout_Functionality) |
+| Session tokens left in browser storage after logout | After you log out | WSTG-CLNT-12 |
 | Password change ends other sessions | After a second login and a password change | WSTG-ATHN-08 |
 | A new login elsewhere (informational) | After a second login | WSTG-SESS-11 |
 | Cookie attributes | When you sign in | [WSTG-SESS-02](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes) |
@@ -106,6 +108,10 @@ The toolbar icon is in colour on sites in scope and grey elsewhere, and shows a 
 - If your app's logout is not recognised, click **I logged out, check now**.
 
 The extension never logs in, logs out or changes passwords by itself, and never asks for your credentials. Logout is recognised by requests such as `/logout`, `/sign-out` or `DELETE /api/session`, or by the session cookie being removed. A password change is recognised by a successful `POST`, `PUT` or `PATCH` to a URL such as `/password`; a failed attempt does not count.
+
+After a logout the result also shows whether session tokens were left behind in the browser's own storage, so a clean server-side logout that still leaks an access token into `localStorage` does not slip through:
+
+![Token left in localStorage after logout](docs/screenshots/9-storage.png)
 
 ### Timeout tests
 
@@ -189,6 +195,7 @@ Only within the program's scope and rules. Add the in-scope domains to the scope
 | `cache` | Signed-in pages are cacheable |
 | `token-in-url` | The session ID is put in the URL after login |
 | `trust-role` | A client-side `role` cookie decides what the account page shows |
+| `storage-logout` | An access token is kept in `localStorage` and not cleared at logout |
 
 `--idle 300` and `--absolute 3600` set server timeouts in seconds.
 

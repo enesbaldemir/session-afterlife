@@ -165,3 +165,22 @@ test('without trust-role, the role cookie is ignored', async () => {
     assert.ok(!asAdmin.includes('Administrator tools'));
   } finally { await app.close(); }
 });
+
+test('flaw storage-logout: account page stashes a token in localStorage', async () => {
+  const app = await start({ flaws: ['storage-logout'] });
+  try {
+    const sid = await login(app.base);
+    const html = await fetch(`${app.base}/account`, { headers: { Cookie: `sid=${sid}` } }).then((r) => r.text());
+    assert.match(html, /localStorage\.setItem\('access_token'/);
+    assert.match(html, /sessionStorage\.setItem\('csrf'/);
+  } finally { await app.close(); }
+});
+
+test('without storage-logout, no token is stashed', async () => {
+  const app = await start({});
+  try {
+    const sid = await login(app.base);
+    const html = await fetch(`${app.base}/account`, { headers: { Cookie: `sid=${sid}` } }).then((r) => r.text());
+    assert.ok(!html.includes('localStorage.setItem'));
+  } finally { await app.close(); }
+});
