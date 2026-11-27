@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Session Afterlife",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Checks whether an old session still works after logout, password change or timeout, and audits session cookies. For authorized testing only.",
   "minimum_chrome_version": "116",
   "permissions": [
